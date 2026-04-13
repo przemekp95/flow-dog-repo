@@ -5,8 +5,7 @@ on:
     pull_request:
 
 env:
-    PHP_VERSION: '8.4.20'
-    PHP_VERSION_ID: '80420'
+    PHP_VERSION: '8.4'
 
 jobs:
     qa:
@@ -22,8 +21,8 @@ jobs:
                   php-version: ${{ env.PHP_VERSION }}
                   coverage: none
 
-            - name: Assert PHP patch version
-              run: php -r "if ((string) PHP_VERSION_ID !== getenv('PHP_VERSION_ID')) { fwrite(STDERR, 'Expected PHP '.getenv('PHP_VERSION').', got '.PHP_VERSION.PHP_EOL); exit(1);} echo 'Using PHP '.PHP_VERSION.PHP_EOL;"
+            - name: Assert PHP version line
+              run: php -r "if (PHP_MAJOR_VERSION !== 8 || PHP_MINOR_VERSION !== 4) { fwrite(STDERR, 'Expected PHP 8.4.x, got '.PHP_VERSION.PHP_EOL); exit(1);} echo 'Using PHP '.PHP_VERSION.PHP_EOL;"
 
             - name: Setup Node.js
               uses: actions/setup-node@v4
