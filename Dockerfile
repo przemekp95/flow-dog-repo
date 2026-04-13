@@ -1,5 +1,7 @@
 FROM php:8.4.20-cli-alpine3.22 AS php-base
 
+RUN apk upgrade --no-cache
+
 FROM composer/composer:2-bin AS composer-bin
 
 FROM php:8.4.20-cli-alpine3.22 AS build
