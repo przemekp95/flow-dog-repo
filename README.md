@@ -288,7 +288,7 @@ docker build --pull --target runtime -t flowdog-order-api:ci .
 W `CI` dochodzą jeszcze:
 
 - jawny check patch version dla `PHP 8.4.20`,
-- smoke test produkcyjnego runtime image pod `GET /api/doc.json`,
+- smoke test produkcyjnego runtime image pod `GET /api/doc.json` oraz przykładowy `POST /orders` z asercją zapisu zamówienia w kontenerze,
 - asercja, że runtime image domyślnie startuje z `APP_ENV=prod` i nie zawiera dev-only artefaktów, takich jak `vendor/bin/phpunit` czy katalog `tests`,
 - skan `Trivy` typu filesystem dla repo,
 - skan `Trivy` zbudowanego obrazu Docker.

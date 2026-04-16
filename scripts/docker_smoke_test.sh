@@ -76,6 +76,94 @@ fetch_openapi_json() {
     ' "$url" "$output_file"
 }
 
+post_sample_order() {
+    local url="$1"
+    local output_file="$2"
+    local payload='{"customerId":123,"items":[{"productId":10,"quantity":2}],"couponCode":"PROMO10"}'
+
+    if command -v curl >/dev/null 2>&1; then
+        local status_code
+        status_code="$(
+            curl \
+                --silent \
+                --show-error \
+                --output "$output_file" \
+                --write-out '%{http_code}' \
+                --request POST \
+                --header 'Content-Type: application/json' \
+                --data "$payload" \
+                "$url"
+        )"
+
+        if [[ "$status_code" != "201" ]]; then
+            cat "$output_file" >&2 || true
+            fail "Expected POST ${url} to return HTTP 201, got ${status_code}."
+        fi
+
+        return 0
+    fi
+
+    local php_bin
+    php_bin="$(resolve_php_bin)" || fail 'Neither curl nor PHP was found. Install curl, put php in PATH, or provide .tools/php84-common/php.'
+
+    "$php_bin" -r '
+        $url = $argv[1];
+        $outputFile = $argv[2];
+        $payload = $argv[3];
+
+        $context = stream_context_create([
+            "http" => [
+                "method" => "POST",
+                "header" => "Content-Type: application/json\r\n",
+                "content" => $payload,
+                "ignore_errors" => true,
+                "timeout" => 20,
+            ],
+        ]);
+
+        $body = @file_get_contents($url, false, $context);
+        $headers = $http_response_header ?? [];
+        $statusLine = $headers[0] ?? "";
+
+        if (!preg_match("/\\s(\\d{3})\\s/", $statusLine, $matches) || (int) $matches[1] !== 201) {
+            fwrite(STDERR, "Expected HTTP 201, got: {$statusLine}\n");
+            if (is_string($body)) {
+                fwrite(STDERR, $body . "\n");
+            }
+            exit(1);
+        }
+
+        if (!is_string($body) || file_put_contents($outputFile, $body) === false) {
+            fwrite(STDERR, "Failed to write smoke test response\n");
+            exit(1);
+        }
+    ' "$url" "$output_file" "$payload"
+}
+
+extract_order_id() {
+    local input_file="$1"
+    local php_bin
+    php_bin="$(resolve_php_bin)" || fail 'PHP not found. Install php or provide .tools/php84-common/php.'
+
+    "$php_bin" -r '
+        $inputFile = $argv[1];
+        $payload = json_decode((string) file_get_contents($inputFile), true);
+
+        if (!is_array($payload) || ($payload["total"] ?? null) !== 216 || ($payload["couponCode"] ?? null) !== "PROMO10") {
+            fwrite(STDERR, "Unexpected sample order response payload\n");
+            exit(1);
+        }
+
+        $orderId = $payload["id"] ?? null;
+        if (!is_string($orderId) || $orderId === "") {
+            fwrite(STDERR, "Sample order response does not contain a valid id\n");
+            exit(1);
+        }
+
+        echo $orderId;
+    ' "$input_file"
+}
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --image)
@@ -142,3 +230,11 @@ done
 
 fetch_openapi_json "http://127.0.0.1:${host_port}/api/doc.json" "${openapi_output}"
 grep -q '"openapi"' "${openapi_output}"
+
+sample_order_response="$(mktemp)"
+trap 'rm -f "$sample_order_response"; cleanup' EXIT
+
+post_sample_order "http://127.0.0.1:${host_port}/orders" "${sample_order_response}"
+order_id="$(extract_order_id "${sample_order_response}")"
+
+"$DOCKER_BIN" exec "$container_id" sh -lc "[ -f /app/var/orders/${app_env}/${order_id}.json ]"
